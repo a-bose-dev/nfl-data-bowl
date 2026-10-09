@@ -90,6 +90,59 @@ body {
   padding: 22px 24px 48px;
 }
 
+.guide {
+  margin-bottom: 18px;
+}
+
+.guide-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.guide-tabs button {
+  border: 1px solid #cfc8bf;
+  background: var(--card);
+  color: var(--ink-soft);
+  font: 700 0.78rem/1 var(--sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.guide-tabs button[aria-selected="true"] {
+  background: #111;
+  color: #f7f4ef;
+  border-color: #111;
+}
+
+.guide-panel {
+  max-width: 68ch;
+  margin-top: 8px;
+  padding: 14px 16px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.guide-panel p,
+.guide-panel ul {
+  margin: 0;
+}
+
+.guide-panel p + p {
+  margin-top: 8px;
+}
+
+.guide-panel ul {
+  padding-left: 1.15em;
+}
+
+.guide-panel li + li {
+  margin-top: 6px;
+}
+
 .filters {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -32,6 +32,7 @@ export default function App() {
   const [formation, setFormation] = useState("all");
   const [minSnaps, setMinSnaps] = useState(initialSnaps.mean);
   const [search, setSearch] = useState("");
+  const [guide, setGuide] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
 
   const alignments = alignmentsFor(coverageData, coverage);
@@ -113,6 +114,63 @@ export default function App() {
       </header>
 
       <main className="page">
+        <section className="guide" aria-label="About this tool">
+          <div className="guide-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              id="guide-purpose-tab"
+              aria-selected={guide === "purpose"}
+              aria-controls="guide-panel"
+              onClick={() => setGuide(guide === "purpose" ? null : "purpose")}
+            >
+              What it's for
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="guide-navigate-tab"
+              aria-selected={guide === "navigate"}
+              aria-controls="guide-panel"
+              onClick={() => setGuide(guide === "navigate" ? null : "navigate")}
+            >
+              How to use
+            </button>
+          </div>
+          {guide ? (
+            <div
+              className="guide-panel"
+              role="tabpanel"
+              id="guide-panel"
+              aria-labelledby={guide === "purpose" ? "guide-purpose-tab" : "guide-navigate-tab"}
+            >
+              {guide === "purpose" ? (
+                <>
+                  <p>
+                    Separation above expected is how much more or less space a receiver creates at pass release than a typical receiver against the same coverage and from the same alignment. Players are judged against the situation they actually faced.
+                  </p>
+                  <p>
+                    The measure uses NFL Next Gen Stats tracking and PFF coverage and scouting data from weeks 1–8 of 2021. Each receiver's separation above expected is plotted against yards per route run. The four groups are receivers who create space and produce, create space but lack the yardage, produce without space, or do neither.
+                  </p>
+                  <p>
+                    Coaches can see who could separate more, or produce more from the space they already get. Fans and broadcasters can use it to explain a route. Scouts can use it to look for the next great route runner.
+                  </p>
+                </>
+              ) : (
+                <ul>
+                  <li>Coverage, alignment, and formation set the situation. All is the default for each.</li>
+                  <li>Minimum snaps starts at the average snap count for that situation. Drag it to widen or narrow the list.</li>
+                  <li>Search filters the list by name. The rank stays the player's place in the full list.</li>
+                  <li>The metric is yards of separation above the league average for the situation you selected.</li>
+                  <li>Hover a row to mark that player on the scatter plot and on the density curve.</li>
+                  <li>The scatter plot is separation above expected against yards per route. The crosshairs are the league averages, and the four corners are the four groups.</li>
+                  <li>The curve shows where the group sits, from the 1st through the 99th percentile.</li>
+                </ul>
+              )}
+            </div>
+          ) : null}
+        </section>
+
         <form className="filters" onSubmit={(event) => event.preventDefault()}>
           <label>
             Coverage
