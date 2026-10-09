@@ -31,6 +31,7 @@ export default function App() {
   const [alignment, setAlignment] = useState("all");
   const [formation, setFormation] = useState("all");
   const [minSnaps, setMinSnaps] = useState(initialSnaps.mean);
+  const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
 
   const alignments = alignmentsFor(coverageData, coverage);
@@ -47,7 +48,13 @@ export default function App() {
     return qualifiedPlayers(coverageData, playerData, coverage, alignment, formation, activeMin);
   }, [coverage, alignment, formation, activeMin]);
 
-  const selected = rows.find((row) => row.nflId === selectedId) || null;
+  const query = search.trim().toLowerCase();
+  const visible = useMemo(() => {
+    if (!query) return rows;
+    return rows.filter((row) => row.name.toLowerCase().includes(query));
+  }, [rows, query]);
+
+  const selected = visible.find((row) => row.nflId === selectedId) || null;
 
   function applyMinSnaps(nextCoverage, nextAlignment, nextFormation) {
     setMinSnaps(snapBounds(coverageData, playerData, nextCoverage, nextAlignment, nextFormation).mean);
@@ -72,11 +79,16 @@ export default function App() {
     applyMinSnaps(coverage, next, nextFormation);
   }
 
-  const status = rows.length === 0
-    ? "No players at or above the snap minimum."
-    : rows.length === 1
-      ? "1 player at or above the snap minimum."
-      : `${formatCount(rows.length)} players at or above the snap minimum.`;
+  let status = rows.length === 1
+    ? "1 player at or above the snap minimum."
+    : `${formatCount(rows.length)} players at or above the snap minimum.`;
+  if (rows.length === 0) {
+    status = "No players at or above the snap minimum.";
+  } else if (query) {
+    status = visible.length === 1
+      ? "1 player matches the search."
+      : `${formatCount(visible.length)} players match the search.`;
+  }
 
   const formationPhrase = formation === "all" ? "all formations" : labelFormation(formation);
   const leagueRouteYards = yardsPerRoute(expected);
@@ -156,6 +168,15 @@ export default function App() {
               <p className="average-value">{expected?.mean == null ? "—" : formatYards(expected.mean, 2)}</p>
               <h2 id="average-heading">Average separation</h2>
               <p className="average-meta">{meta}</p>
+              <label className="player-search">
+                Search
+                <input
+                  type="search"
+                  value={search}
+                  placeholder="Player name"
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </label>
             </div>
             <div className="table-scroll">
               <table>
@@ -170,14 +191,16 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.length === 0 ? (
+                  {visible.length === 0 ? (
                     <tr>
                       <td className="empty-cell" colSpan={5}>
-                        No players have this many snaps in the selected configuration. Lower the minimum to widen the list.
+                        {rows.length === 0
+                          ? "No players have this many snaps in the selected configuration. Lower the minimum to widen the list."
+                          : "No players match that search."}
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row, index) => {
+                    visible.map((row) => {
                       const shown = Math.round(row.metric * 10) / 10;
                       const tone = shown > 0 ? "metric-pos" : shown < 0 ? "metric-neg" : "";
                       const selectedRow = row.nflId === selectedId;
@@ -196,7 +219,7 @@ export default function App() {
                             }
                           }}
                         >
-                          <td className="rank">{index + 1}</td>
+                          <td className="rank">{rows.indexOf(row) + 1}</td>
                           <td className="name">{row.name}</td>
                           <td className="num">{formatCount(row.n)}</td>
                           <td className="num"><span className={tone}>{formatSigned(row.metric)}</span></td>
