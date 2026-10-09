@@ -107,7 +107,7 @@ export default function App() {
     <>
       <header className="mast">
         <div className="mast-inner">
-          <h1>Separation leaders</h1>
+          <h1>Who gets open?</h1>
           <p className="lede">Yards of separation above the average for this coverage, alignment, and formation.</p>
         </div>
       </header>
