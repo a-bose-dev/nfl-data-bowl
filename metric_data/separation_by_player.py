@@ -5,7 +5,6 @@ Same coverage, alignment, and personnel keys as separation_by_coverage.json.
 A cell is included only when that player has at least one sample.
 """
 
-import csv
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -13,27 +12,23 @@ from pathlib import Path
 import separation_at_release as sep
 
 OUTPUT_PATH = Path(__file__).resolve().parent / "separation_by_player.json"
-PLAYERS_PATH = sep.ROOT / "data" / "players.csv"
-
-
-def load_names():
-    names = {}
-    with PLAYERS_PATH.open(newline="") as handle:
-        for row in csv.DictReader(handle):
-            names[row["nflId"]] = row["displayName"]
-    return names
 
 
 def personnel_with_samples(codes):
-    extras = sorted(code for code in codes if code not in sep.TABLE_PERSONNEL)
+    extras = sorted(code for code in codes if code not in sep.TABLE_PERSONNEL and code != sep.ALL_PERSONNEL)
     return [code for code in sep.TABLE_PERSONNEL if code in codes] + extras
 
 
-def collect_by_player(coverage, targets):
+def collect_by_player(coverage, targets, credited):
     samples = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
-    for nfl_id, group, alignment, personnel, dist in sep.iter_separations(coverage, targets):
-        samples[nfl_id][group][alignment][personnel].append(dist)
+    for nfl_id, group, alignment, personnel, dist, yards in sep.iter_separations(coverage, targets, credited):
+        samples[nfl_id][group][alignment][personnel].append((dist, yards))
     return samples
+
+
+def cell_from_pairs(pairs):
+    summary = sep.summarize([dist for dist, _yards in pairs], [yards for _dist, yards in pairs])
+    return {"n": summary["n"], "mean": summary["mean"], "yards": summary["yards"]}
 
 
 def build_result(samples, names):
@@ -48,14 +43,11 @@ def build_result(samples, names):
                 buckets = samples[nfl_id][group].get(alignment)
                 if not buckets:
                     continue
-                group_body[alignment] = {
-                    code: {
-                        "n": summary["n"],
-                        "mean": summary["mean"],
-                    }
-                    for code in personnel_with_samples(buckets)
-                    for summary in (sep.summarize(buckets[code]),)
-                }
+                codes = personnel_with_samples(buckets)
+                pooled = [pair for code in codes for pair in buckets[code]]
+                group_body[alignment] = {sep.ALL_PERSONNEL: cell_from_pairs(pooled)}
+                for code in codes:
+                    group_body[alignment][code] = cell_from_pairs(buckets[code])
             if group_body:
                 player[group] = group_body
         result[nfl_id] = player
@@ -65,7 +57,9 @@ def build_result(samples, names):
 def main():
     coverage = sep.load_coverage()
     targets = sep.load_targets(coverage)
-    result = build_result(collect_by_player(coverage, targets), load_names())
+    names = sep.load_names()
+    credited = sep.load_credited_yards(targets, names)
+    result = build_result(collect_by_player(coverage, targets, credited), names)
     OUTPUT_PATH.write_text(json.dumps(result, indent=2) + "\n")
     print(f"wrote {OUTPUT_PATH} ({len(result)} players)")
 

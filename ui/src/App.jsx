@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import coverageData from "../../metric_data/separation_by_coverage.json";
 import playerData from "../../metric_data/separation_by_player.json";
 import DistributionChart from "./DistributionChart.jsx";
+import QuadrantChart from "./QuadrantChart.jsx";
 import {
   alignmentsFor,
   cellFor,
@@ -14,25 +15,31 @@ import {
   labelCoverage,
   labelFormation,
   qualifiedPlayers,
+  snapBounds,
+  yardsPerRoute,
 } from "./metrics.js";
 
 const coverages = coveragesFor(coverageData);
+const initialSnaps = snapBounds(coverageData, playerData, "all", "all", "all");
 
 function keepOrFirst(options, current) {
   return options.includes(current) ? current : options[0] || "";
 }
 
 export default function App() {
-  const [coverage, setCoverage] = useState("man");
-  const [alignment, setAlignment] = useState("wide");
-  const [formation, setFormation] = useState("11");
-  const [minSnapsText, setMinSnapsText] = useState("5");
+  const [coverage, setCoverage] = useState("all");
+  const [alignment, setAlignment] = useState("all");
+  const [formation, setFormation] = useState("all");
+  const [minSnaps, setMinSnaps] = useState(initialSnaps.mean);
   const [selectedId, setSelectedId] = useState(null);
 
   const alignments = alignmentsFor(coverageData, coverage);
   const formations = formationsFor(coverageData, coverage, alignment);
-  const minSnaps = Number.parseInt(minSnapsText, 10);
-  const activeMin = Number.isFinite(minSnaps) && minSnaps >= 1 ? minSnaps : null;
+  const bounds = useMemo(
+    () => snapBounds(coverageData, playerData, coverage, alignment, formation),
+    [coverage, alignment, formation],
+  );
+  const activeMin = Math.min(Math.max(minSnaps, 1), bounds.max);
 
   const expected = cellFor(coverageData, coverage, alignment, formation);
   const rows = useMemo(() => {
@@ -42,36 +49,46 @@ export default function App() {
 
   const selected = rows.find((row) => row.nflId === selectedId) || null;
 
+  function applyMinSnaps(nextCoverage, nextAlignment, nextFormation) {
+    setMinSnaps(snapBounds(coverageData, playerData, nextCoverage, nextAlignment, nextFormation).mean);
+  }
+
   function chooseCoverage(next) {
     const nextAlignments = alignmentsFor(coverageData, next);
     const nextAlignment = keepOrFirst(nextAlignments, alignment);
     const nextFormations = formationsFor(coverageData, next, nextAlignment);
+    const nextFormation = keepOrFirst(nextFormations, formation);
     setCoverage(next);
     setAlignment(nextAlignment);
-    setFormation(keepOrFirst(nextFormations, formation));
+    setFormation(nextFormation);
+    applyMinSnaps(next, nextAlignment, nextFormation);
   }
 
   function chooseAlignment(next) {
     const nextFormations = formationsFor(coverageData, coverage, next);
+    const nextFormation = keepOrFirst(nextFormations, formation);
     setAlignment(next);
-    setFormation(keepOrFirst(nextFormations, formation));
+    setFormation(nextFormation);
+    applyMinSnaps(coverage, next, nextFormation);
   }
 
-  const status =
-    activeMin == null
-      ? ""
-      : rows.length === 1
-        ? "1 player at or above the snap minimum."
-        : `${formatCount(rows.length)} players at or above the snap minimum.`;
+  const status = rows.length === 0
+    ? "No players at or above the snap minimum."
+    : rows.length === 1
+      ? "1 player at or above the snap minimum."
+      : `${formatCount(rows.length)} players at or above the snap minimum.`;
+
+  const formationPhrase = formation === "all" ? "all formations" : labelFormation(formation);
+  const leagueRouteYards = yardsPerRoute(expected);
 
   const meta =
     expected && expected.mean != null
-      ? `${formatCount(expected.n)} plays in ${labelCoverage(coverage).toLowerCase()} coverage, ${labelAlignment(alignment).toLowerCase()} alignment, ${labelFormation(formation)}.`
+      ? `${formatCount(expected.n)} plays in ${labelCoverage(coverage).toLowerCase()} coverage, ${labelAlignment(alignment).toLowerCase()} alignment, ${formationPhrase}.`
       : "This configuration has no league sample.";
 
-  let chartCopy = "Select a player to place their mean on the league distribution for this configuration.";
-  if (selected && expected?.mean != null) {
-    chartCopy = `${selected.name} averages ${formatYards(selected.mean, 2)} yards. The league average in this configuration is ${formatYards(expected.mean, 2)}.`;
+  let chartCopy = "Kernel density of separation above expected, limited to the 1st through 99th percentile. Hover a player to mark them on the curve.";
+  if (selected) {
+    chartCopy = `${selected.name} is ${formatSigned(selected.metric)} yards above expected.`;
   }
 
   return (
@@ -103,26 +120,31 @@ export default function App() {
           </label>
           <label>
             Formation
-            <select value={formation} onChange={(event) => setFormation(event.target.value)}>
+            <select
+              value={formation}
+              onChange={(event) => {
+                const next = event.target.value;
+                setFormation(next);
+                applyMinSnaps(coverage, alignment, next);
+              }}
+            >
               {formations.map((code) => (
                 <option key={code} value={code}>{labelFormation(code)}</option>
               ))}
             </select>
           </label>
-          <label>
-            Minimum snaps
+          <label className="snap-control">
+            <span>Minimum snaps</span>
             <input
-              type="number"
+              type="range"
               min="1"
+              max={bounds.max}
               step="1"
-              inputMode="numeric"
-              value={minSnapsText}
-              onChange={(event) => setMinSnapsText(event.target.value)}
-              onBlur={() => {
-                const parsed = Number.parseInt(minSnapsText, 10);
-                if (!Number.isFinite(parsed) || parsed < 1) setMinSnapsText("5");
-              }}
+              value={activeMin}
+              aria-valuetext={`${formatCount(activeMin)} snaps`}
+              onChange={(event) => setMinSnaps(Number(event.target.value))}
             />
+            <span className="snap-value">{formatCount(activeMin)}</span>
           </label>
         </form>
 
@@ -151,9 +173,7 @@ export default function App() {
                   {rows.length === 0 ? (
                     <tr>
                       <td className="empty-cell" colSpan={5}>
-                        {activeMin == null
-                          ? "Enter a snap minimum of at least 1."
-                          : "No players have this many snaps in the selected configuration. Lower the minimum to widen the list."}
+                        No players have this many snaps in the selected configuration. Lower the minimum to widen the list.
                       </td>
                     </tr>
                   ) : (
@@ -166,8 +186,9 @@ export default function App() {
                           key={row.nflId}
                           className={selectedRow ? "player-row is-selected" : "player-row"}
                           tabIndex={0}
-                          aria-pressed={selectedRow}
-                          onClick={() => setSelectedId(row.nflId)}
+                          aria-selected={selectedRow}
+                          onMouseEnter={() => setSelectedId(row.nflId)}
+                          onFocus={() => setSelectedId(row.nflId)}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
@@ -189,12 +210,25 @@ export default function App() {
             </div>
           </section>
 
-          <aside className="rail" aria-labelledby="chart-heading">
-            <h2 id="chart-heading">Where they sit</h2>
-            <p className="rail-copy">{chartCopy}</p>
-            <DistributionChart player={selected} expected={expected} />
-          </aside>
+          <section className="quadrant" aria-labelledby="quadrant-heading">
+            <h2 id="quadrant-heading">Separation and production</h2>
+            <p className="quadrant-copy">
+              Each player is separation above expected against yards per route run. The crosshairs are the league average and league yards per route for this configuration.
+            </p>
+            <QuadrantChart
+              rows={rows}
+              leagueYards={leagueRouteYards}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+            />
+          </section>
         </div>
+
+        <aside className="rail" aria-labelledby="chart-heading">
+          <h2 id="chart-heading">Where they sit</h2>
+          <p className="rail-copy">{chartCopy}</p>
+          <DistributionChart player={selected} rows={rows} />
+        </aside>
       </main>
     </>
   );
